@@ -1,0 +1,944 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<meta name="theme-color" content="#0b72d6">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="icon-192.png">
+<link rel="apple-touch-icon" href="apple-touch-icon.png">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Bubble Shooter">
+<title>Bubble Shooter</title>
+<style>
+  :root { --bg:#090c2e; --panel:#1a2150; --ink:#eef2ff; --muted:#9aa8d6; --accent:#ffd23f; }
+  * { box-sizing: border-box; }
+  html, body { height: 100%; margin: 0; overscroll-behavior: none; -webkit-tap-highlight-color: transparent; }
+  body {
+    background: radial-gradient(ellipse at top, #2f3496, #151a58 45%, var(--bg) 100%);
+    color: var(--ink);
+    font-family: "Avenir Next Rounded", "Nunito", "Trebuchet MS", system-ui, sans-serif;
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+    gap: 6px; padding: max(6px, env(safe-area-inset-top)) 6px max(6px, env(safe-area-inset-bottom)); overflow: hidden; user-select: none; touch-action: none;
+  }
+  #hud { display: flex; justify-content: space-between; align-items: baseline; width: min(396px, 100%); }
+  #score { font-size: 2rem; font-weight: 800; letter-spacing: .5px; }
+  #score small { font-size: .8rem; font-weight: 600; color: var(--muted); margin-right: 8px; }
+  #drop { font-size: .9rem; color: var(--muted); }
+  #drop b { color: var(--accent); }
+  #wrap { position: relative; }
+  canvas {
+    display: block; border-radius: 16px; background: var(--panel);
+    box-shadow: 0 10px 40px rgba(0,0,0,.45), inset 0 0 0 2px rgba(255,255,255,.06);
+    width: min(calc(100vw - 12px), calc((100dvh - 172px - env(safe-area-inset-top, 0px) - env(safe-area-inset-bottom, 0px)) * 396 / 640)); height: auto; aspect-ratio: 396 / 640; cursor: crosshair;
+  }
+  #overlay {
+    position: absolute; inset: 0; border-radius: 16px; display: none;
+    flex-direction: column; align-items: center; justify-content: center; gap: 8px;
+    background: rgba(8, 12, 22, .82); text-align: center;
+  }
+  #overlay.show { display: flex; }
+  #overlay h1 { margin: 0; font-size: 2.4rem; }
+  #overlay p { margin: 0 0 12px; color: var(--muted); font-size: 1.1rem; }
+  #overlay p b { color: var(--ink); font-size: 1.6rem; display: block; }
+  button {
+    font: inherit; font-weight: 800; font-size: 1.05rem; color: #1a1400; background: var(--accent);
+    border: 0; border-radius: 999px; padding: 12px 28px; cursor: pointer;
+  }
+  #play { display: none; flex-direction: column; align-items: center; gap: 6px; }
+  #play.on { display: flex; }
+  #sub { display: flex; justify-content: space-between; width: min(396px, 100%); font-size: .8rem; color: var(--muted); }
+  #sub b, .gold { color: var(--accent); }
+  .screen { position: fixed; inset: 0; z-index: 5; display: none; flex-direction: column; align-items: center; gap: 14px;
+    padding: max(18px, env(safe-area-inset-top)) 16px 28px; overflow-y: auto; touch-action: pan-y;
+    background: radial-gradient(ellipse at top, #2f3496, #151a58 45%, var(--bg) 100%); }
+  .screen.on { display: flex; }
+  #home { justify-content: center; }
+  .logo { margin: 0; font-size: 3.2rem; line-height: 1; font-weight: 900; text-align: center; letter-spacing: -1px; }
+  .dots { display: flex; gap: 8px; } .dots i { width: 22px; height: 22px; border-radius: 50%; }
+  .menuBtn { width: min(260px, 100%); position: relative; }
+  .big { font-size: 1.3rem; padding: 16px 28px; }
+  button.alt { background: #27406b; color: var(--ink); }
+  button.tiny { padding: 6px 14px; font-size: .85rem; }
+  .bank { display: flex; align-items: center; gap: 6px; font-weight: 800; }
+  .bank b { margin-right: 8px; }
+  .coin { display: inline-block; width: 14px; height: 14px; border-radius: 50%; background: var(--accent); box-shadow: inset -2px -2px 0 #b88a00; }
+  .top { display: flex; justify-content: space-between; align-items: center; width: min(420px, 100%); }
+  .top h2 { margin: 0; }
+  #dot { display: none; position: absolute; top: 6px; right: 12px; width: 12px; height: 12px; border-radius: 50%; background: #ff4d5e; }
+  #levelGrid { display: grid; grid-template-columns: repeat(5, 1fr); gap: 10px; width: min(420px, 100%); }
+  #levelGrid button { display: flex; flex-direction: column; align-items: center; padding: 10px 0; border-radius: 14px;
+    background: #27406b; color: var(--ink); font-size: 1.15rem; line-height: 1.3; }
+  #levelGrid small { color: var(--accent); font-size: .7rem; letter-spacing: 1px; }
+  #levelGrid button:disabled { opacity: .4; cursor: default; }
+  .item, .chest { display: flex; align-items: center; gap: 12px; width: min(420px, 100%); padding: 12px; border-radius: 16px; background: var(--panel); }
+  .item .ic { font-size: 2rem; } .item > div { flex: 1; } .item p { margin: 2px 0 0; color: var(--muted); font-size: .8rem; }
+  .item button { display: flex; align-items: center; gap: 6px; padding: 10px 16px; }
+  .item button:disabled { opacity: .4; cursor: default; }
+  .chest { flex-direction: column; text-align: center; padding: 28px 18px; }
+  #ovStars { font-size: 2.2rem; color: var(--accent); letter-spacing: 4px; }
+  #ovExtra { color: var(--accent); font-weight: 800; margin-bottom: 8px; }
+  /* --- glossy mobile-game look --- */
+  button { box-shadow: 0 4px 0 rgba(0,0,0,.35); text-shadow: 0 1px 0 rgba(255,255,255,.3); }
+  button:active { transform: translateY(2px); box-shadow: 0 2px 0 rgba(0,0,0,.35); }
+  button.alt { background: linear-gradient(#5cc0ff, #1478d8); color: #fff; text-shadow: 0 1px 0 rgba(0,0,0,.3); }
+  #playBtn { background: linear-gradient(#8bea62, #2fb62a); color: #fff; text-shadow: 0 2px 0 rgba(0,0,0,.25); }
+  .bank { background: rgba(8,14,50,.65); border-radius: 999px; padding: 3px 12px 3px 4px; }
+  .coin { width: 22px; height: 22px; border: 2px solid #ffe27a; box-shadow: none; background: radial-gradient(circle at 35% 30%, #fff3a6, #ffc22e 55%, #c98500); }
+  .top { background: linear-gradient(#3db5ff, #0b72d6); padding: 8px 12px; border-radius: 16px; box-shadow: 0 4px 0 #084a94; }
+  .top h2 { color: #fff; text-shadow: 0 2px 0 rgba(0,0,0,.25); }
+  .logo { background: linear-gradient(#fff, #ffd23f 55%, #ff8a1f); -webkit-background-clip: text; background-clip: text; color: transparent;
+    filter: drop-shadow(0 4px 0 #6a2c91); }
+  .dots i { box-shadow: inset -3px -4px 0 rgba(0,0,0,.2), inset 3px 3px 0 rgba(255,255,255,.4); }
+  #hud { align-items: center; padding: 6px 10px; border-radius: 16px; background: linear-gradient(#3db5ff, #0b72d6); box-shadow: 0 4px 0 #084a94; }
+  #hud .bank { padding-right: 14px; }
+  #score { display: flex; flex-direction: column; align-items: center; gap: 2px; font-size: 1rem; }
+  #liveStars { font-size: 1.1rem; line-height: 1; color: var(--accent); letter-spacing: 2px; text-shadow: 0 2px 0 rgba(0,0,0,.3); }
+  #liveStars i { font-style: normal; color: #3a4a86; }
+  #scoreVal { background: rgba(8,14,50,.7); border-radius: 999px; padding: 2px 18px; }
+  .round { width: 38px; height: 38px; padding: 0; border-radius: 50%; font-size: .8rem; color: #fff;
+    background: radial-gradient(#6fd6ff, #1a7fe0); box-shadow: 0 0 0 3px #fff, 0 3px 0 3px rgba(0,0,0,.25); }
+  #bar { display: flex; justify-content: space-around; width: min(396px, 100%); padding: 6px 4px; border-radius: 16px; background: rgba(8,14,50,.5); }
+  #bar button { display: flex; flex-direction: column; align-items: center; gap: 3px; padding: 0; background: none; box-shadow: none; text-shadow: none; color: var(--ink); }
+  #bar .ic { position: relative; display: flex; align-items: center; justify-content: center; width: 38px; height: 38px; border-radius: 50%; font-size: 1.15rem;
+    background: radial-gradient(circle at 35% 30%, #fff, #aab6d8 55%, #5e6c94); box-shadow: 0 0 0 2px #2b3a6b, 0 3px 0 2px rgba(0,0,0,.3); transition: transform .15s; }
+  #bar small { font-size: .62rem; color: var(--muted); font-weight: 700; }
+  #bar em { position: absolute; top: -4px; right: -7px; min-width: 17px; height: 17px; display: flex; align-items: center; justify-content: center;
+    border-radius: 50%; background: #2fb62a; color: #fff; font-size: .62rem; font-style: normal; box-shadow: 0 0 0 2px #fff; }
+  #bar em.empty { background: #ff8a1f; }
+  #bar button.armed .ic { transform: scale(1.1); box-shadow: 0 0 0 4px var(--accent), 0 0 18px 5px rgba(255,210,63,.7); }
+  .item { position: relative; color: #4a2f12; background: linear-gradient(#f5e3c2, #d9bd8e); box-shadow: 0 4px 0 #8f6a37; }
+  .item:first-child { background: linear-gradient(#ffc653, #f08a14); box-shadow: 0 4px 0 #a85d0a; }
+  .item:first-child::after { content: "Most popular"; position: absolute; top: -9px; right: -6px; transform: rotate(6deg);
+    background: #e0302f; color: #fff; font-size: .65rem; font-weight: 800; padding: 3px 8px; border-radius: 8px; }
+  .item p, .item small { color: #6b4b25; }
+  .item:first-child p, .item:first-child small { color: #5a3508; }
+  .item button { background: linear-gradient(#8bea62, #2fb62a); color: #fff; text-shadow: 0 1px 0 rgba(0,0,0,.3); }
+  .chest { background: linear-gradient(#f5e3c2, #d9bd8e); color: #4a2f12; box-shadow: 0 4px 0 #8f6a37; }
+  #hud, #sub, #bar { width: 100%; }
+  #bar small { display: none; }
+  #bar em { top: -5px; right: -6px; }
+  #muteBtn { position: absolute; top: 14px; right: 14px; font-size: 1rem; }
+  button:hover { filter: brightness(1.08); }
+  button:focus-visible { outline: 3px solid #fff; outline-offset: 3px; }
+</style>
+</head>
+<body>
+  <div id="play">
+  <div id="hud">
+    <div class="bank"><span class="coin"></span><b class="bCoins">0</b></div>
+    <div id="score"><div id="liveStars">★★★</div><span id="scoreVal">0</span></div>
+    <button id="quit" class="round" aria-label="Menu">❚❚</button>
+  </div>
+  <div id="sub">
+    <span>Level <b id="lvlVal">1</b></span>
+    <span>Bubbles <b id="leftVal">0</b> · <span class="gold">★★★</span> at <b id="goalVal">0</b>+</span>
+    <span>Row in <b id="dropVal">6</b></span>
+  </div>
+  <div id="wrap">
+    <canvas id="game" width="396" height="640" aria-label="Bubble Shooter game board"></canvas>
+    <div id="overlay" role="dialog" aria-live="polite">
+      <h1 id="ovTitle">Game Over</h1>
+      <div id="ovStars"></div>
+      <p><span id="ovLabel">Score</span><b id="finalVal">0</b></p>
+      <div id="ovExtra"></div>
+      <button id="again">Retry</button>
+      <button id="menuBtn" class="alt">Levels</button>
+    </div>
+  </div>
+  <div id="bar"></div>
+</div>
+
+<section id="home" class="screen on">
+  <button id="muteBtn" class="round" aria-label="Sound on/off">🔊</button>
+  <div class="bank"><span class="coin"></span><b class="bCoins">0</b><span class="gold">★</span><b class="bStars">0</b></div>
+  <div class="dots"><i style="background:#ff4d5e"></i><i style="background:#3d8bff"></i><i style="background:#35d47c"></i><i style="background:#ffd23f"></i><i style="background:#b45cff"></i></div>
+  <h1 class="logo">Bubble<br>Shooter</h1>
+  <button id="playBtn" class="big menuBtn">Play</button>
+  <button class="alt menuBtn" data-go="levels">Levels</button>
+  <button class="alt menuBtn" data-go="store">Store</button>
+  <button id="dailyOpen" class="alt menuBtn">Daily Loot<i id="dot"></i></button>
+</section>
+<section id="levels" class="screen">
+  <div class="top"><button class="alt tiny" data-go="home">‹ Back</button><h2>Levels</h2><div class="bank"><span class="coin"></span><b class="bCoins">0</b><span class="gold">★</span><b class="bStars">0</b></div></div>
+  <svg id="levelMap" viewBox="0 0 400 2740" style="width:min(420px,100%);height:auto;flex:none"></svg>
+</section>
+<section id="store" class="screen">
+  <div class="top"><button class="alt tiny" id="storeBack">‹ Back</button><h2>Shop</h2><div class="bank"><span class="coin"></span><b class="bCoins">0</b><span class="gold">★</span><b class="bStars">0</b></div></div>
+  <div id="storeList" style="display:contents"></div>
+  <p style="color:var(--muted);font-size:.85rem;text-align:center;max-width:320px">Power-ups are only found here and in the Daily Loot. Earn coins by clearing levels.</p>
+</section>
+<section id="daily" class="screen">
+  <div class="top"><button class="alt tiny" data-go="home">‹ Back</button><h2>Daily Loot</h2><div class="bank"><span class="coin"></span><b class="bCoins">0</b><span class="gold">★</span><b class="bStars">0</b></div></div>
+  <div class="chest"><div style="font-size:4rem">🎁</div><p id="dailyText"></p><button id="dailyBtn">Open loot</button></div>
+</section>
+
+<script>
+"use strict";
+
+/* ---------- Configuration ---------- */
+const R = 18;                         // bubble radius
+const D = R * 2;                      // bubble diameter
+const ROW_H = R * Math.sqrt(3);       // vertical distance between hex rows
+const COLS = 11;                      // bubbles in a full row
+const W = COLS * D, H = 640;          // canvas size (396 x 640)
+const MISSES_UNUSED = 0;
+// Level layouts: (row, col, colsInRow) -> true if a bubble starts there
+const SHAPES = {
+  full:    () => true,
+  tri:     (r, c, n) => c >= r * .6 && c < n - r * .6,      // inverted triangle
+  stripes: (r, c) => r % 2 === 0 || c % 2 === 0,
+  u:       (r, c, n) => r < 2 || c < 2 || c >= n - 2,
+  comb:    (r, c) => r < 2 || c % 3 === 0,
+};
+// shape, starting rows, colors, misses before a new row, bomb chance per piece
+const LEVELS = [
+  { shape: "full",    rows: 4,  colors: 3, misses: 6, bomb: .10 },
+  { shape: "full",    rows: 5,  colors: 4, misses: 6, bomb: .09 },
+  { shape: "tri",     rows: 8,  colors: 4, misses: 6, bomb: .09 },
+  { shape: "stripes", rows: 7,  colors: 4, misses: 5, bomb: .08 },
+  { shape: "u",       rows: 9,  colors: 5, misses: 5, bomb: .08 },
+  { shape: "comb",    rows: 9,  colors: 5, misses: 5, bomb: .07 },
+  { shape: "tri",     rows: 10, colors: 5, misses: 5, bomb: .07 },
+  { shape: "full",    rows: 8,  colors: 5, misses: 4, bomb: .07 },
+  { shape: "stripes", rows: 10, colors: 5, misses: 4, bomb: .06 },
+  { shape: "u",       rows: 10, colors: 5, misses: 4, bomb: .06 },
+];
+// Levels repeat after the last one, getting a miss tighter each lap (minimum 3).
+function levelConfig(n) {
+  const base = LEVELS[(n - 1) % LEVELS.length], lap = Math.floor((n - 1) / LEVELS.length);
+  return { ...base, misses: Math.max(3, base.misses - lap) };
+}
+const MISSES_PER_ROW = 5;             // non-popping shots before a new row drops
+const DEAD_Y = H - 100;               // bubbles crossing this line end the game
+const SHOOTER = { x: W / 2, y: H - 46 };
+const SPEED = 14;                     // pixels per frame
+const SUBSTEPS = 4;                   // movement sub-steps per frame for accurate collisions
+const POINTS_POP = 10, POINTS_DROP = 20;
+
+// [highlight, base, shadow]
+const COLORS = [
+  ["#ffb3ba", "#ff4d5e", "#a3162b"],   // red
+  ["#b3d4ff", "#3d8bff", "#1347a8"],   // blue
+  ["#c2ffd9", "#35d47c", "#0d7a41"],   // green
+  ["#fff3b0", "#ffd23f", "#b88a00"],   // yellow
+  ["#e6c7ff", "#b45cff", "#6a1fb3"],   // purple
+];
+
+/* ---------- Save data: coins, stars, power-up inventory, daily loot ---------- */
+const $ = id => document.getElementById(id);
+const TOTAL_LEVELS = 30;
+const POWERS = {
+  bomb:    { icon: "💣", name: "Bomb",      price: 60,  desc: "Blasts bubbles within two rings of the impact." },
+  mega:    { icon: "🧨", name: "Mega Bomb", price: 130, desc: "A much bigger blast radius." },
+  rainbow: { icon: "🌈", name: "Rainbow",   price: 80,  desc: "Wild bubble: takes the color that makes the biggest match." },
+  freeze:  { icon: "❄️", name: "Freeze",    price: 50,  desc: "Delays the next row drop by 3 shots." },
+};
+const Save = {
+  d: { coins: 100, stars: {}, unlocked: 1, inv: { bomb: 2, mega: 1, rainbow: 1, freeze: 1 }, lastDaily: "", streak: 0, muted: false },
+  load() { try { Object.assign(this.d, JSON.parse(localStorage.getItem("bubbleShooterSave")) || {}); } catch (e) {} },
+  save() { try { localStorage.setItem("bubbleShooterSave", JSON.stringify(this.d)); } catch (e) {} },
+  totalStars() { return Object.values(this.d.stars).reduce((a, b) => a + b, 0); },
+  today() { return new Date().toDateString(); },
+};
+
+/* ---------- Sound: every effect is synthesized with Web Audio ---------- */
+const Sfx = {
+  ctx: null, muted: false,
+  init() {                                   // browsers only allow audio after a tap
+    if (!this.ctx) { try { this.ctx = new (window.AudioContext || window.webkitAudioContext)(); } catch (e) {} }
+    if (this.ctx && this.ctx.state === "suspended") this.ctx.resume();
+  },
+  tone(f, d, type = "sine", v = .15, to = f, at = 0) {
+    if (!this.ctx || this.muted) return;
+    const c = this.ctx, t = c.currentTime + at, o = c.createOscillator(), g = c.createGain();
+    o.type = type; o.frequency.setValueAtTime(f, t); o.frequency.exponentialRampToValueAtTime(Math.max(1, to), t + d);
+    g.gain.setValueAtTime(v, t); g.gain.exponentialRampToValueAtTime(.001, t + d);
+    o.connect(g); g.connect(c.destination); o.start(t); o.stop(t + d + .02);
+  },
+  noise(d, v = .3, f = 900) {                // filtered noise burst (explosions, pops)
+    if (!this.ctx || this.muted) return;
+    const c = this.ctx, t = c.currentTime, n = Math.floor(c.sampleRate * d), buf = c.createBuffer(1, n, c.sampleRate);
+    const data = buf.getChannelData(0); for (let i = 0; i < n; i++) data[i] = Math.random() * 2 - 1;
+    const src = c.createBufferSource(), flt = c.createBiquadFilter(), g = c.createGain();
+    src.buffer = buf; flt.type = "lowpass";
+    flt.frequency.setValueAtTime(f * 3, t); flt.frequency.exponentialRampToValueAtTime(Math.max(40, f * .15), t + d);
+    g.gain.setValueAtTime(v, t); g.gain.exponentialRampToValueAtTime(.001, t + d);
+    src.connect(flt); flt.connect(g); g.connect(c.destination); src.start(t);
+  },
+  shoot()   { this.tone(420, .12, "sine", .18, 900); },
+  bounce()  { this.tone(260, .05, "square", .05, 200); },
+  stick()   { this.tone(180, .07, "sine", .2, 120); },
+  pop(n = 3) {                               // bigger groups pop with a longer rising run
+    for (let i = 0; i < Math.min(n, 7); i++) this.tone(520 + i * 85 + Math.random() * 40, .12, "triangle", .17, 180, i * .045);
+    this.noise(.06, .08, 3000);
+  },
+  drop()    { this.tone(700, .35, "sine", .12, 150); },
+  boom(big) { this.noise(big ? .9 : .6, big ? .6 : .45, 700); this.tone(big ? 70 : 100, big ? .7 : .45, "sawtooth", .35, 25); },
+  sparkle() { for (let i = 0; i < 5; i++) this.tone(700 + i * 220, .14, "sine", .13, 900 + i * 260, i * .05); },
+  freeze()  { this.tone(1400, .4, "triangle", .15, 300); this.tone(1800, .3, "sine", .08, 600, .05); },
+  swap()    { this.tone(380, .07, "sine", .15, 620); },
+  arm()     { this.tone(660, .09, "triangle", .15, 990); },
+  thud()    { this.tone(130, .25, "sine", .3, 50); },
+  click()   { this.tone(600, .04, "square", .05, 500); },
+  coin()    { this.tone(1200, .08, "square", .08); this.tone(1700, .18, "square", .08, 1700, .08); },
+  over()    { [392, 370, 349, 311].forEach((f, i) => this.tone(f, .35, "sawtooth", .1, f * .97, i * .28)); },
+  victory() {                                // short fanfare: [frequency, start, length]
+    [[523, 0, .14], [523, .15, .14], [523, .3, .14], [659, .45, .3], [587, .8, .14], [659, .95, .14], [784, 1.1, .5],
+     [659, 1.7, .14], [784, 1.85, .14], [1047, 2, .9]].forEach(([f, t, d]) => {
+      this.tone(f, d + .1, "square", .08, f, t); this.tone(f / 2, d + .1, "triangle", .12, f / 2, t);
+    });
+    [523, 659, 784].forEach(f => this.tone(f, 1, "triangle", .08, f, 2));
+  },
+};
+
+/* ---------- Bubble: a colored circle, also used for effects ---------- */
+class Bubble {
+  constructor(color, x = 0, y = 0) { this.color = color; this.x = x; this.y = y; }
+
+  draw(ctx, scale = 1, alpha = 1, r = R - 1) {
+    const rr = r * scale;
+    if (rr <= 0) return;
+    if (this.power) return this.drawPower(ctx, rr, alpha);
+    const [hi, base, lo] = COLORS[this.color];
+    const g = ctx.createRadialGradient(this.x - rr * .35, this.y - rr * .4, rr * .1, this.x, this.y, rr);
+    g.addColorStop(0, hi); g.addColorStop(.45, base); g.addColorStop(1, lo);
+    ctx.globalAlpha = alpha;
+    ctx.fillStyle = g;
+    ctx.beginPath(); ctx.arc(this.x, this.y, rr, 0, Math.PI * 2); ctx.fill();
+    ctx.globalAlpha = alpha * .55;                      // specular glint
+    ctx.fillStyle = "#fff";
+    ctx.beginPath(); ctx.ellipse(this.x - rr * .35, this.y - rr * .42, rr * .22, rr * .13, -.6, 0, Math.PI * 2); ctx.fill();
+    ctx.globalAlpha = 1;
+  }
+
+  // Power-up pieces: rainbow orb, or bomb / mega bomb
+  drawPower(ctx, rr, alpha) {
+    if (this.power !== "rainbow") return this.drawBomb(ctx, rr, alpha);
+    const g = ctx.createConicGradient(Date.now() / 600, this.x, this.y);
+    COLORS.forEach((c, i) => g.addColorStop(i / COLORS.length, c[1])); g.addColorStop(1, COLORS[0][1]);
+    ctx.globalAlpha = alpha; ctx.fillStyle = g;
+    ctx.beginPath(); ctx.arc(this.x, this.y, rr, 0, Math.PI * 2); ctx.fill();
+    ctx.globalAlpha = alpha * .6; ctx.fillStyle = "#fff";
+    ctx.beginPath(); ctx.ellipse(this.x - rr * .35, this.y - rr * .42, rr * .25, rr * .15, -.6, 0, Math.PI * 2); ctx.fill();
+    ctx.globalAlpha = 1;
+  }
+
+  // Bomb: dark glossy sphere with a flickering fuse (mega is red)
+  drawBomb(ctx, rr, alpha) {
+    const g = ctx.createRadialGradient(this.x - rr * .35, this.y - rr * .4, rr * .1, this.x, this.y, rr);
+    const mega = this.power === "mega";
+    g.addColorStop(0, mega ? "#ff9a6b" : "#8191b3"); g.addColorStop(.45, mega ? "#b3261e" : "#232c42"); g.addColorStop(1, mega ? "#3a0603" : "#05070d");
+    ctx.globalAlpha = alpha; ctx.fillStyle = g;
+    ctx.beginPath(); ctx.arc(this.x, this.y, rr, 0, Math.PI * 2); ctx.fill();
+    ctx.strokeStyle = "#c9a36a"; ctx.lineWidth = 2;
+    ctx.beginPath(); ctx.moveTo(this.x + rr * .3, this.y - rr * .8);
+    ctx.quadraticCurveTo(this.x + rr * .6, this.y - rr * 1.2, this.x + rr * .9, this.y - rr * 1.1); ctx.stroke();
+    ctx.fillStyle = Math.sin(Date.now() / 70) > 0 ? "#ffb02e" : "#ff4d5e";
+    ctx.beginPath(); ctx.arc(this.x + rr * .9, this.y - rr * 1.1, rr * .17, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = "#ff4d5e";                                   // red warning dot
+    ctx.beginPath(); ctx.arc(this.x, this.y + rr * .15, rr * .22, 0, Math.PI * 2); ctx.fill();
+    ctx.globalAlpha = 1;
+  }
+}
+
+/* ---------- Grid: staggered hex layout of bubbles ---------- */
+class Grid {
+  constructor() { this.rows = []; this.parity = 0; }
+
+  reset(cfg) {
+    this.rows = []; this.parity = 0; this.numColors = cfg.colors;
+    const shape = SHAPES[cfg.shape];
+    for (let r = 0; r < cfg.rows; r++) {
+      this.ensure(r);
+      const n = this.colsIn(r);
+      for (let c = 0; c < n; c++) if (shape(r, c, n)) this.set(r, c, new Bubble(Math.floor(Math.random() * cfg.colors)));
+    }
+  }
+
+  // Odd (shifted) rows are offset by R and hold one fewer bubble.
+  shifted(r) { return ((r + this.parity) & 1) === 1; }
+  colsIn(r) { return this.shifted(r) ? COLS - 1 : COLS; }
+
+  pos(r, c) { return { x: R + c * D + (this.shifted(r) ? R : 0), y: R + r * ROW_H }; }
+
+  ensure(r) { while (this.rows.length <= r) this.rows.push(new Array(COLS).fill(null)); }
+
+  get(r, c) {
+    if (r < 0 || r >= this.rows.length || c < 0 || c >= this.colsIn(r)) return null;
+    return this.rows[r][c];
+  }
+
+  set(r, c, bubble) {
+    this.ensure(r);
+    this.rows[r][c] = bubble;
+    if (bubble) { const p = this.pos(r, c); bubble.x = p.x; bubble.y = p.y; }
+  }
+
+  // Push everything down and insert a fresh random row at the top.
+  addRow() {
+    this.rows.unshift(new Array(COLS).fill(null));
+    this.parity ^= 1;                        // keeps the stagger alternating after the shift
+    for (let c = 0; c < this.colsIn(0); c++) {
+      this.set(0, c, new Bubble(Math.floor(Math.random() * this.numColors)));
+    }
+    // re-sync pixel positions of all bubbles
+    this.each((b, r, c) => { const p = this.pos(r, c); b.x = p.x; b.y = p.y; });
+  }
+
+  each(fn) {
+    this.rows.forEach((row, r) => row.forEach((b, c) => { if (b) fn(b, r, c); }));
+  }
+
+  list() { const out = []; this.each((b, r, c) => out.push({ b, r, c })); return out; }
+
+  neighbors(r, c) {
+    const d = this.shifted(r) ? [[0, 1]] : [[0, -1]];
+    const diag = this.shifted(r) ? [0, 1] : [-1, 0];
+    const cells = [[r, c - 1], [r, c + 1], [r - 1, c + diag[0]], [r - 1, c + diag[1]],
+                   [r + 1, c + diag[0]], [r + 1, c + diag[1]]];
+    return cells.filter(([rr, cc]) => rr >= 0 && cc >= 0 && rr < this.rows.length && cc < this.colsIn(rr));
+  }
+
+  // Nearest empty slot to a pixel position (used for snapping).
+  snap(x, y) {
+    const r0 = Math.round((y - R) / ROW_H);
+    let best = null, bestD = Infinity;
+    for (let r = Math.max(0, r0 - 2); r <= r0 + 2; r++) {
+      this.ensure(r);
+      for (let c = 0; c < this.colsIn(r); c++) {
+        if (this.rows[r][c]) continue;
+        const p = this.pos(r, c), d = (p.x - x) ** 2 + (p.y - y) ** 2;
+        if (d < bestD) { bestD = d; best = { r, c }; }
+      }
+    }
+    return best;
+  }
+
+  // Connected same-color bubbles (flood fill).
+  cluster(r, c) {
+    const color = this.get(r, c).color, seen = new Set([r + "," + c]), stack = [[r, c]], out = [];
+    while (stack.length) {
+      const [cr, cc] = stack.pop(); out.push([cr, cc]);
+      for (const [nr, nc] of this.neighbors(cr, cc)) {
+        const n = this.get(nr, nc), key = nr + "," + nc;
+        if (n && n.color === color && !seen.has(key)) { seen.add(key); stack.push([nr, nc]); }
+      }
+    }
+    return out;
+  }
+
+  // Bubbles not connected to the ceiling (row 0) through any chain.
+  orphans() {
+    const seen = new Set(), stack = [];
+    for (let c = 0; c < this.colsIn(0); c++) if (this.get(0, c)) { seen.add("0," + c); stack.push([0, c]); }
+    while (stack.length) {
+      const [r, c] = stack.pop();
+      for (const [nr, nc] of this.neighbors(r, c)) {
+        const key = nr + "," + nc;
+        if (this.get(nr, nc) && !seen.has(key)) { seen.add(key); stack.push([nr, nc]); }
+      }
+    }
+    return this.list().filter(({ r, c }) => !seen.has(r + "," + c));
+  }
+
+  lowestY() { let m = 0; this.each(b => { m = Math.max(m, b.y + R); }); return m; }
+  colorsInPlay() { const s = new Set(); this.each(b => s.add(b.color)); return [...s]; }
+}
+
+/* ---------- Game: state, input, physics, rendering ---------- */
+class Game {
+  constructor(canvas) {
+    this.canvas = canvas; this.ctx = canvas.getContext("2d");
+    this.grid = new Grid();
+    this.aim = -Math.PI / 2;
+    canvas.addEventListener("pointermove", e => this.setAim(e));
+    canvas.addEventListener("pointerup", e => { if (this.overNext(e)) return this.swap(); this.setAim(e); this.fire(); });
+    window.addEventListener("keydown", e => { if (e.code === "Space" && $("play").classList.contains("on")) { e.preventDefault(); this.swap(); } });
+    $("again").addEventListener("click", () => this.start(this.state === "cleared" && this.level < TOTAL_LEVELS ? this.level + 1 : this.level));
+    $("menuBtn").addEventListener("click", () => go("levels"));
+    this.sc = 1;
+    this.starsBg = Array.from({ length: 45 }, () => [Math.random() * W, Math.random() * H * .6, .3 + Math.random() * .6]);
+    $("bar").innerHTML = Object.entries(POWERS).map(([k, p]) =>
+      `<button data-p="${k}" title="${p.desc}"><span class="ic">${p.icon}<em>0</em></span><small>${p.name}</small></button>`).join("");
+    $("bar").addEventListener("click", e => { const b = e.target.closest("button"); if (b) this.usePower(b.dataset.p); });
+    canvas.addEventListener("contextmenu", e => e.preventDefault());   // right-click / long-press never swaps
+    this.start();
+    requestAnimationFrame(() => this.loop());
+  }
+
+  start(level = this.level || 1) {
+    this.level = level; this.cfg = levelConfig(level);
+    this.grid.reset(this.cfg);
+    this.score = 0;
+    this.misses = 0; this.state = "aim"; this.banner = 110;
+    this.shots = 0; this.armed = null; this.initial = this.grid.list().length;
+    // limited bubbles: a bit more than the layout needs, tighter on later levels
+    this.limit = Math.ceil(this.initial * Math.max(.7, .85 - this.level * .005)) + 6;
+    this.shot = null; this.effects = []; this.falling = []; this.parts = []; this.finale = null;
+    this.current = this.makePiece(); this.next = this.makePiece();
+    document.getElementById("overlay").classList.remove("show");
+    this.updateHud();
+  }
+
+  // A new shooter piece: usually a colored bubble, sometimes a bomb.
+  makePiece() {
+    const b = new Bubble(this.randomColor());
+    return b;
+  }
+
+  left() { return Math.max(0, this.limit - this.shots); }   // bubbles still available
+
+  refreshBar() {
+    for (const b of document.querySelectorAll("#bar button")) {
+      const k = b.dataset.p, n = Save.d.inv[k] || 0;
+      const em = b.querySelector("em");
+      em.textContent = n || "+"; em.classList.toggle("empty", !n);      // "+" = buy more in the store
+      b.classList.toggle("armed", this.armed === k);
+    }
+  }
+
+  // Power-ups are chosen from the bar: bombs/rainbow arm the next shot, freeze acts instantly.
+  usePower(k) {
+    if (this.state !== "aim") return;
+    if (!(Save.d.inv[k] > 0)) return go("store");
+    if (k === "freeze") {
+      Save.d.inv[k]--; Save.save(); this.misses -= 3; this.updateHud(); Sfx.freeze();
+    } else { this.armed = this.armed === k ? null : k; Sfx.arm(); }
+    this.refreshBar();
+  }
+
+  show(title, label, btn, stars = "", extra = "") {
+    $("ovStars").textContent = stars; $("ovExtra").textContent = extra;
+    document.getElementById("ovTitle").textContent = title;
+    document.getElementById("ovLabel").textContent = label;
+    document.getElementById("finalVal").textContent = this.score;
+    document.getElementById("again").textContent = btn;
+    document.getElementById("overlay").classList.add("show");
+  }
+
+  // Only hand out colors still on the board so the player is never stuck.
+  randomColor() {
+    const pool = this.grid.colorsInPlay();
+    const list = pool.length ? pool : COLORS.map((_, i) => i);
+    return list[Math.floor(Math.random() * list.length)];
+  }
+
+  updateHud() {
+    document.getElementById("scoreVal").textContent = this.score;
+    document.getElementById("dropVal").textContent = this.cfg.misses - this.misses;
+    document.getElementById("lvlVal").textContent = this.level;
+    const st = this.shots <= this.initial * .5 ? 3 : this.shots <= this.initial * .75 ? 2 : 1;
+    $("liveStars").innerHTML = "★".repeat(st) + `<i>${"★".repeat(3 - st)}</i>`;
+    $("leftVal").textContent = this.left(); $("goalVal").textContent = this.limit - Math.floor(this.initial * .5);
+    this.refreshBar();
+  }
+
+  setAim(e) {
+    const rect = this.canvas.getBoundingClientRect();
+    const x = (e.clientX - rect.left) * (W / rect.width), y = (e.clientY - rect.top) * (H / rect.height);
+    let a = Math.atan2(y - SHOOTER.y, x - SHOOTER.x);
+    this.aim = Math.max(-Math.PI + .17, Math.min(-.17, a < 0 ? a : (x < W / 2 ? -Math.PI + .17 : -.17)));
+  }
+
+  // Is the pointer on the "next bubble" button?
+  overNext(e) {
+    const r = this.canvas.getBoundingClientRect();
+    const x = (e.clientX - r.left) * (W / r.width), y = (e.clientY - r.top) * (H / r.height);
+    return (x - SHOOTER.x - 30) ** 2 + (y - SHOOTER.y - 26) ** 2 < 28 ** 2;
+  }
+
+  swap() { if (this.state !== "aim" || this.left() <= 1) return; [this.current, this.next] = [this.next, this.current]; Sfx.swap(); }
+
+  fire() {
+    if (this.state !== "aim" || (!this.armed && this.left() <= 0)) return;
+    this.shot = new Bubble(this.current.color, SHOOTER.x, SHOOTER.y);
+    const k = this.armed;                              // armed power-up replaces this shot
+    if (k) { this.shot.power = k; this.armed = null; Save.d.inv[k]--; Save.save(); }
+    Sfx.shoot();
+    if (!k) this.shots++;                              // power-up shots don't use up a bubble
+    this.updateHud();
+    this.shot.vx = Math.cos(this.aim) * SPEED; this.shot.vy = Math.sin(this.aim) * SPEED;
+    this.state = "flying";
+  }
+
+  // Advance a moving bubble one sub-step; returns true if it should stop.
+  step(b, dx, dy, cells) {
+    b.x += dx; b.y += dy;
+    if (b.x < R) { b.x = R; b.vx = -b.vx; if (b === this.shot) Sfx.bounce(); }                       // left wall bounce
+    else if (b.x > W - R) { b.x = W - R; b.vx = -b.vx; if (b === this.shot) Sfx.bounce(); }          // right wall bounce
+    if (b.y <= R) { b.y = R; return true; }                       // ceiling
+    const lim = (D - 3) ** 2;                                     // circle-to-circle test
+    for (const o of cells) if ((o.x - b.x) ** 2 + (o.y - b.y) ** 2 < lim) return true;
+    return false;
+  }
+
+  update() {
+    if (this.state === "flying") {
+      const cells = this.grid.list().map(o => o.b), s = this.shot;
+      for (let i = 0; i < SUBSTEPS; i++) {
+        if (this.step(s, s.vx / SUBSTEPS, s.vy / SUBSTEPS, cells)) { this.land(); break; }
+      }
+    }
+    for (const f of this.falling) { f.vy += .6; f.x += f.vx; f.y += f.vy; }
+    this.falling = this.falling.filter(f => f.y < H + 40);
+    for (const e of this.effects) e.t += 1 / 14;
+    if (this.banner > 0) this.banner--;
+    for (const q of this.parts) { q.x += q.vx; q.y += q.vy; q.vy += q.g; q.life -= q.d; }
+    this.parts = this.parts.filter(q => q.life > 0);
+    if (this.state === "finale") this.updateFinale();
+    this.effects = this.effects.filter(e => e.t < 1);
+  }
+
+  // Snap, match, drop orphans, then advance the turn.
+  land() {
+    const s = this.shot; this.shot = null;
+    const slot = this.grid.snap(s.x, s.y);
+    const power = s.power;
+    if (power === "bomb" || power === "mega") {         // bombs don't count as misses
+      this.explode(slot ? this.grid.pos(slot.r, slot.c) : s, power === "mega" ? 3.2 : 2.1);
+      return this.afterShot(true);
+    }
+    if (!slot) return this.end();
+    this.grid.set(slot.r, slot.c, new Bubble(power === "rainbow" ? this.bestColor(slot) : s.color));
+
+    const group = this.grid.cluster(slot.r, slot.c);
+    if (power === "rainbow") Sfx.sparkle();
+    if (group.length < 3) Sfx.stick();
+    if (group.length >= 3) {
+      this.misses = 0; Sfx.pop(group.length);
+      for (const [r, c] of group) this.pop(r, c);
+      this.score += group.length * POINTS_POP;
+      this.dropOrphans();
+    } else if (++this.misses >= this.cfg.misses) {
+      this.misses = 0; this.grid.addRow(); Sfx.thud();
+    }
+    this.afterShot(!!power);
+  }
+
+  // Rainbow: pick the neighboring color that forms the biggest group.
+  bestColor(slot) {
+    const cols = new Set();
+    for (const [r, c] of this.grid.neighbors(slot.r, slot.c)) { const n = this.grid.get(r, c); if (n) cols.add(n.color); }
+    let best = Math.floor(Math.random() * COLORS.length), bestN = -1;
+    for (const col of cols) {
+      this.grid.set(slot.r, slot.c, new Bubble(col));
+      const n = this.grid.cluster(slot.r, slot.c).length;
+      if (n > bestN) { bestN = n; best = col; }
+    }
+    this.grid.rows[slot.r][slot.c] = null;
+    return best;
+  }
+
+  burst(x, y, color, n = 7) {                     // little shards when a bubble pops
+    for (let i = 0; i < n; i++) {
+      const a = Math.random() * Math.PI * 2, v = 1.5 + Math.random() * 3.5;
+      this.parts.push({ x, y, vx: Math.cos(a) * v, vy: Math.sin(a) * v - 1, g: .22, d: .04, life: 1, c: COLORS[color][1] });
+    }
+  }
+
+  // Victory: fanfare + confetti while the loaded bubbles fire off by themselves and burst for bonus points.
+  updateFinale() {
+    const f = this.finale; f.t++;
+    if (f.t < 150 && f.t % 2 === 0) {
+      for (let i = 0; i < 2; i++) this.parts.push({ x: Math.random() * W, y: -8, vx: (Math.random() - .5) * 1.5, vy: 1 + Math.random() * 2,
+        g: .02, d: .006, life: 1, sq: true, c: COLORS[Math.floor(Math.random() * COLORS.length)][1] });
+    }
+    if (f.t > 40 && f.queue.length && f.t % 14 === 0) {
+      const tx = 40 + Math.random() * (W - 80), ty = 50 + Math.random() * 260, a = Math.atan2(ty - SHOOTER.y, tx - SHOOTER.x);
+      const b = new Bubble(f.queue.shift(), SHOOTER.x, SHOOTER.y);
+      Object.assign(b, { vx: Math.cos(a) * 18, vy: Math.sin(a) * 18, tx, ty });
+      f.fly.push(b); Sfx.shoot();
+    }
+    for (const b of f.fly) {
+      b.x += b.vx; b.y += b.vy;
+      if ((b.tx - b.x) * b.vx + (b.ty - b.y) * b.vy <= 0) {          // reached its target: burst
+        b.done = true; this.effects.push({ b, t: 0 }); this.burst(b.x, b.y, b.color, 12);
+        Sfx.pop(3 + f.hits); f.hits++; f.bonus += 50; this.score += 50; this.updateHud();
+      }
+    }
+    f.fly = f.fly.filter(b => !b.done);
+    if (!f.queue.length && !f.fly.length && ++f.wait > 50) this.finishLevel();
+  }
+
+  finishLevel() {
+    const f = this.finale, r = this.result, total = r.coins + f.hits;       // +1 coin per bonus bubble
+    this.state = "cleared"; Save.d.coins += total; Save.save(); refreshBank();
+    this.show(`Level ${this.level} cleared!`, "Score", this.level < TOTAL_LEVELS ? "Next Level" : "Replay",
+      "★".repeat(r.stars) + "☆".repeat(3 - r.stars), `+${total} coins · bonus ${f.bonus}`);
+  }
+
+  // Bubbles cut off from the ceiling fall away for bonus points.
+  dropOrphans() {
+    const list = this.grid.orphans();
+    if (list.length) Sfx.drop();
+    for (const { b, r, c } of list) {
+      this.grid.rows[r][c] = null;
+      b.vx = (Math.random() - .5) * 3; b.vy = -2 - Math.random() * 3;
+      this.falling.push(b);
+      this.score += POINTS_DROP;
+    }
+  }
+
+  // Bomb blast: clears everything within ~2 bubbles of the impact point.
+  explode(p, k = 2.1) {
+    Sfx.boom(k > 2.5);
+    this.effects.push({ ring: { x: p.x, y: p.y, r: D * k }, t: 0 });
+    let n = 0;
+    for (const { b, r, c } of this.grid.list()) {
+      if ((b.x - p.x) ** 2 + (b.y - p.y) ** 2 < (D * k) ** 2) { this.pop(r, c); n++; }
+    }
+    this.score += n * POINTS_POP;
+    this.dropOrphans();
+  }
+
+  // Common end-of-turn: level clear, reload cannon, game-over check.
+  afterShot(keepPiece) {
+    if (this.grid.list().length === 0) return this.levelClear();
+    if (!keepPiece) { this.current = this.next; this.next = this.makePiece(); }   // power-ups keep the loaded bubble
+    this.updateHud();
+    if (this.grid.lowestY() >= DEAD_Y) return this.end();
+    const hasPower = ["bomb", "mega", "rainbow"].some(k => (Save.d.inv[k] || 0) > 0);
+    if (this.left() <= 0 && !hasPower) return this.end("Out of bubbles");
+    this.state = "aim";
+  }
+
+  // Stars depend on how few shots the level took; coins and the next level unlock.
+  levelClear() {
+    this.state = "finale";
+    const n = this.initial, stars = this.shots <= n * .5 ? 3 : this.shots <= n * .75 ? 2 : 1, d = Save.d;
+    this.result = { stars, coins: 15 + stars * 10 + this.level * 2 };
+    d.stars[this.level] = Math.max(d.stars[this.level] || 0, stars);
+    d.unlocked = Math.max(d.unlocked, Math.min(TOTAL_LEVELS, this.level + 1));
+    Save.save();
+    // every unused bubble (up to 12) fires out on its own for bonus points
+    const left = Math.min(12, this.left());
+    const queue = [this.current.color, this.next.color].slice(0, left);
+    while (queue.length < left) queue.push(Math.floor(Math.random() * COLORS.length));
+    this.finale = { queue, fly: [], t: 0, hits: 0, bonus: 0, wait: 0 };
+    Sfx.victory();
+  }
+
+  pop(r, c) {
+    const b = this.grid.rows[r][c]; this.grid.rows[r][c] = null;
+    this.effects.push({ b, t: 0 });
+    this.burst(b.x, b.y, b.color);
+  }
+
+  end(msg) {
+    this.state = "over"; Sfx.over();
+    const coins = Math.floor(this.score / 100);          // small consolation reward
+    Save.d.coins += coins; Save.save(); refreshBank();
+    this.show(msg || "Game Over", "Score", "Retry", "", coins ? `+${coins} coins` : "");
+  }
+
+  /* ----- rendering ----- */
+  trajectory() {
+    const p = new Bubble(0, SHOOTER.x, SHOOTER.y);
+    p.vx = Math.cos(this.aim) * 4; p.vy = Math.sin(this.aim) * 4;
+    const cells = this.grid.list().map(o => o.b), pts = [{ x: p.x, y: p.y }];
+    for (let i = 0; i < 700; i++) {
+      const prevVx = p.vx;
+      const stop = this.step(p, p.vx, p.vy, cells);
+      if (p.vx !== prevVx) pts.push({ x: p.x, y: p.y });          // record wall bounce
+      if (stop) break;
+    }
+    pts.push({ x: p.x, y: p.y });
+    return pts;
+  }
+
+  draw() {
+    const ctx = this.ctx;
+    this.fit(); ctx.setTransform(this.sc, 0, 0, this.sc, 0, 0);
+    this.drawBackdrop(ctx);
+
+    // danger line
+    ctx.strokeStyle = "rgba(255,90,100,.45)"; ctx.setLineDash([6, 8]); ctx.lineWidth = 2;
+    ctx.beginPath(); ctx.moveTo(0, DEAD_Y); ctx.lineTo(W, DEAD_Y); ctx.stroke(); ctx.setLineDash([]);
+
+    this.grid.each(b => b.draw(ctx));
+
+    // popping bubbles swell and fade
+    for (const e of this.effects) {
+      if (e.ring) {                                   // bomb shockwave
+        ctx.strokeStyle = `rgba(255,190,70,${1 - e.t})`; ctx.lineWidth = 7 * (1 - e.t) + 1;
+        ctx.beginPath(); ctx.arc(e.ring.x, e.ring.y, e.ring.r * e.t + 8, 0, Math.PI * 2); ctx.stroke();
+      } else e.b.draw(ctx, 1 + e.t * .5, 1 - e.t);
+    }
+    for (const f of this.falling) f.draw(ctx);
+    if (this.state === "finale") for (const b of this.finale.fly) b.draw(ctx);
+    for (const q of this.parts) {
+      ctx.globalAlpha = Math.min(1, q.life); ctx.fillStyle = q.c;
+      if (q.sq) ctx.fillRect(q.x, q.y, 6, 4);
+      else { ctx.beginPath(); ctx.arc(q.x, q.y, 3 * q.life + 1, 0, Math.PI * 2); ctx.fill(); }
+    }
+    ctx.globalAlpha = 1;
+
+    if (this.state === "aim") {
+      const pts = this.trajectory();
+      let carry = 38, k = 0;                         // blue dots that shrink and fade with distance
+      for (let i = 1; i < pts.length; i++) {
+        const a = pts[i - 1], b = pts[i], len = Math.hypot(b.x - a.x, b.y - a.y);
+        let d = carry;
+        for (; d < len; d += 16, k++) {
+          const t = d / len;
+          ctx.fillStyle = `rgba(120,205,255,${Math.max(.3, 1 - k * .025)})`;
+          ctx.beginPath(); ctx.arc(a.x + (b.x - a.x) * t, a.y + (b.y - a.y) * t, Math.max(1.8, 3.8 - k * .05), 0, Math.PI * 2); ctx.fill();
+        }
+        carry = d - len;
+      }
+    }
+
+    // swap ring (current bubble inside, next bubble rides on it), aim arrow and mascot
+    ctx.strokeStyle = "rgba(255,255,255,.85)"; ctx.lineWidth = 2;
+    ctx.beginPath(); ctx.arc(SHOOTER.x + 15, SHOOTER.y + 13, 40, 0, Math.PI * 2); ctx.stroke();
+    ctx.save(); ctx.translate(SHOOTER.x, SHOOTER.y); ctx.rotate(this.aim + Math.PI / 2);
+    ctx.fillStyle = "#6cc4ff"; ctx.beginPath(); ctx.moveTo(0, -64); ctx.lineTo(-9, -47); ctx.lineTo(9, -47); ctx.closePath(); ctx.fill();
+    ctx.restore();
+    ctx.font = "50px serif"; ctx.textAlign = "center"; ctx.fillText("🐻", W - 44, H - 22);
+    ctx.fillStyle = this.left() <= 3 ? "#ff6b6b" : "#fff"; ctx.font = "800 24px system-ui, sans-serif";   // bubbles left
+    ctx.fillText(this.left(), SHOOTER.x - 70, SHOOTER.y + 6);
+    ctx.fillStyle = "#c9d4ff"; ctx.font = "700 10px system-ui, sans-serif"; ctx.fillText("bubbles", SHOOTER.x - 70, SHOOTER.y + 20);
+
+    // current bubble, flying bubble, and next-bubble indicator
+    if (this.state === "aim" && (this.armed || this.left() > 0)) {
+      const p = this.armed ? Object.assign(new Bubble(0), { power: this.armed }) : this.current;
+      p.x = SHOOTER.x; p.y = SHOOTER.y; p.draw(ctx);
+    }
+    if (this.shot) this.shot.draw(ctx);
+    if (this.state !== "finale" && this.left() > 1) { this.next.x = SHOOTER.x + 30; this.next.y = SHOOTER.y + 26; this.next.draw(ctx, 1, 1, 13); }
+    ctx.textAlign = "center";
+    if (this.banner > 0) {                          // level title fades out
+      ctx.globalAlpha = Math.min(1, this.banner / 40);
+      ctx.fillStyle = "#fff"; ctx.font = "800 34px system-ui, sans-serif";
+      ctx.fillText("Level " + this.level, W / 2, H * .58);
+      ctx.globalAlpha = 1;
+    }
+  }
+
+  // Keep the canvas sharp at any display size (game coordinates stay 396 x 640).
+  fit() {
+    const w = this.canvas.getBoundingClientRect().width;
+    if (!w) return;
+    const sc = Math.min(3, Math.max(1, w * (window.devicePixelRatio || 1) / W));
+    if (Math.abs(sc - this.sc) > .01 || this.canvas.width !== Math.round(W * sc)) {
+      this.sc = sc; this.canvas.width = Math.round(W * sc); this.canvas.height = Math.round(H * sc);
+    }
+  }
+
+  // Twilight scene: sky gradient, stars, mountains and a glow under the shooter.
+  drawBackdrop(ctx) {
+    const g = ctx.createLinearGradient(0, 0, 0, H);
+    g.addColorStop(0, "#14246b"); g.addColorStop(.55, "#3a2a82"); g.addColorStop(1, "#8a3f9e");
+    ctx.fillStyle = g; ctx.fillRect(0, 0, W, H);
+    ctx.fillStyle = "#fff";
+    for (const st of this.starsBg) { ctx.globalAlpha = st[2]; ctx.fillRect(st[0], st[1], 2, 2); }
+    ctx.globalAlpha = 1;
+    const ridge = (col, pts) => { ctx.fillStyle = col; ctx.beginPath(); ctx.moveTo(0, H);
+      pts.forEach(([x, y]) => ctx.lineTo(x, H - y)); ctx.lineTo(W, H); ctx.fill(); };
+    ridge("rgba(46,28,110,.9)", [[0, 170], [70, 235], [130, 180], [210, 270], [290, 190], [350, 235], [W, 175]]);
+    ridge("rgba(22,12,66,.95)", [[0, 100], [90, 150], [170, 105], [260, 160], [340, 110], [W, 140]]);
+    const r = ctx.createRadialGradient(SHOOTER.x, SHOOTER.y, 4, SHOOTER.x, SHOOTER.y, 130);
+    r.addColorStop(0, "rgba(255,190,255,.4)"); r.addColorStop(1, "rgba(255,190,255,0)");
+    ctx.fillStyle = r; ctx.fillRect(0, SHOOTER.y - 130, W, 260);
+  }
+
+  loop() { this.update(); this.draw(); requestAnimationFrame(() => this.loop()); }
+}
+
+/* ---------- Menus: home, levels, store, daily loot ---------- */
+Save.load();
+Sfx.muted = !!Save.d.muted;
+const game = new Game($("game"));
+
+function refreshBank() {
+  document.querySelectorAll(".bCoins").forEach(e => e.textContent = Save.d.coins);
+  document.querySelectorAll(".bStars").forEach(e => e.textContent = Save.totalStars());
+  $("dot").style.display = Save.d.lastDaily === Save.today() ? "none" : "inline-block";
+}
+
+let storeFrom = "home";   // the store opens from the menu or mid-level (via a "+" power-up)
+function go(name) {
+  if (name === "store") storeFrom = $("play").classList.contains("on") ? "play" : "home";
+  document.querySelectorAll(".screen").forEach(el => el.classList.toggle("on", el.id === name));
+  $("play").classList.toggle("on", name === "play");
+  if (name === "levels") buildLevels();
+  if (name === "store") buildStore();
+  if (name === "home") $("playBtn").textContent = "Play · Level " + Save.d.unlocked;
+  refreshBank();
+}
+
+function startLevel(n) { go("play"); game.start(n); }
+
+// Winding level map: level 1 at the bottom, a glass-tube path climbing up.
+function buildLevels() {
+  const GAP = 88, HH = TOTAL_LEVELS * GAP + 80;
+  const P = Array.from({ length: TOTAL_LEVELS }, (_, i) => ({ x: 200 + 115 * Math.sin(i * .85), y: HH - 70 - i * GAP }));
+  let d = `M${P[0].x} ${P[0].y}`;
+  for (let i = 1; i < P.length - 1; i++) d += ` Q${P[i].x} ${P[i].y} ${(P[i].x + P[i + 1].x) / 2} ${(P[i].y + P[i + 1].y) / 2}`;
+  d += ` L${P.at(-1).x} ${P.at(-1).y}`;
+  let out = `<path d="${d}" fill="none" stroke="rgba(255,255,255,.3)" stroke-width="36" stroke-linecap="round"/>` +
+            `<path d="${d}" fill="none" stroke="rgba(12,18,60,.75)" stroke-width="28" stroke-linecap="round"/>`;
+  P.forEach((p, i) => {
+    const n = i + 1, st = Save.d.stars[n] || 0, locked = n > Save.d.unlocked, cur = n === Save.d.unlocked;
+    out += `<g ${locked ? "" : `data-lv="${n}"`} style="cursor:${locked ? "default" : "pointer"}">` +
+      (cur ? `<circle cx="${p.x}" cy="${p.y}" r="26" fill="none" stroke="#7ee05a" stroke-width="3"><animate attributeName="r" values="25;33;25" dur="1.4s" repeatCount="indefinite"/></circle>` : "") +
+      `<circle cx="${p.x}" cy="${p.y}" r="21" fill="${locked ? "#8c93a8" : cur ? "#4cd964" : "#ffd23f"}" stroke="#fff" stroke-width="3"/>` +
+      `<text x="${p.x}" y="${p.y + 6}" text-anchor="middle" font-size="18" font-weight="800" fill="#1a1400">${n}</text>` +
+      `<text x="${p.x}" y="${p.y + 38}" text-anchor="middle" font-size="12" fill="#ffd23f">${locked ? "🔒" : "★".repeat(st) + "☆".repeat(3 - st)}</text></g>`;
+  });
+  $("levelMap").setAttribute("viewBox", `0 0 400 ${HH}`);
+  $("levelMap").innerHTML = out;
+  requestAnimationFrame(() => document.querySelector(`#levelMap [data-lv="${Save.d.unlocked}"]`)?.scrollIntoView({ block: "center" }));
+}
+
+function buildStore() {
+  $("storeList").innerHTML = Object.entries(POWERS).map(([k, p]) =>
+    `<div class="item"><span class="ic">${p.icon}</span><div><b>${p.name}</b> <small>owned ${Save.d.inv[k] || 0}</small><p>${p.desc}</p></div>
+     <button data-buy="${k}" ${Save.d.coins < p.price ? "disabled" : ""}><span class="coin"></span>${p.price}</button></div>`).join("");
+}
+
+function openDaily() {
+  go("daily");
+  const d = Save.d, ready = d.lastDaily !== Save.today();
+  $("dailyText").textContent = ready ? "Your loot is ready: coins and a random power-up."
+    : `Come back tomorrow. Current streak: ${d.streak} day${d.streak === 1 ? "" : "s"}.`;
+  $("dailyBtn").style.display = ready ? "" : "none";
+}
+
+document.addEventListener("click", e => { const b = e.target.closest("[data-go]"); if (b) go(b.dataset.go); });
+$("levelMap").addEventListener("click", e => { const b = e.target.closest("[data-lv]"); if (b) startLevel(+b.dataset.lv); });
+$("storeList").addEventListener("click", e => {
+  const b = e.target.closest("[data-buy]"); if (!b) return;
+  const k = b.dataset.buy, p = POWERS[k];
+  if (Save.d.coins < p.price) return;
+  Save.d.coins -= p.price; Save.d.inv[k] = (Save.d.inv[k] || 0) + 1; Save.save(); buildStore(); refreshBank(); Sfx.coin();
+});
+$("playBtn").addEventListener("click", () => startLevel(Save.d.unlocked));
+$("storeBack").addEventListener("click", () => go(storeFrom));
+$("quit").addEventListener("click", () => go("levels"));
+$("dailyOpen").addEventListener("click", openDaily);
+$("dailyBtn").addEventListener("click", () => {
+  const d = Save.d, yesterday = new Date(Date.now() - 864e5).toDateString();
+  d.streak = d.lastDaily === yesterday ? Math.min(d.streak + 1, 7) : 1;
+  const coins = 20 + d.streak * 10, keys = Object.keys(POWERS), k = keys[Math.floor(Math.random() * keys.length)];
+  d.coins += coins; d.inv[k] = (d.inv[k] || 0) + 1; d.lastDaily = Save.today(); Save.save(); refreshBank(); Sfx.coin();
+  $("dailyText").textContent = `Day ${d.streak}: +${coins} coins and ${POWERS[k].icon} ${POWERS[k].name}!`;
+  $("dailyBtn").style.display = "none";
+});
+document.addEventListener("pointerdown", () => Sfx.init());
+document.addEventListener("click", e => { const b = e.target.closest("button"); if (b && !b.closest("#bar")) Sfx.click(); });
+$("muteBtn").textContent = Sfx.muted ? "🔇" : "🔊";
+$("muteBtn").addEventListener("click", () => {
+  Sfx.muted = Save.d.muted = !Sfx.muted; Save.save();
+  $("muteBtn").textContent = Sfx.muted ? "🔇" : "🔊";
+});
+go("home");
+
+// Offline support when installed from a web host
+if ("serviceWorker" in navigator && location.protocol.startsWith("http")) navigator.serviceWorker.register("sw.js").catch(() => {});
+</script>
+</body>
+</html>
